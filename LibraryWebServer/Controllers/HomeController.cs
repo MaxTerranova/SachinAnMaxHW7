@@ -31,18 +31,29 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public IActionResult CheckLogin( string name, int cardnum )
         {
-            // TODO: Fill in. Determine if login is successful or not.
-            bool loginSuccessful = false;
+            bool loginSuccessful = false; 
 
-            if ( !loginSuccessful )
+            using (var context = new Team4LibraryContext())  
             {
-                return Json( new { success = false } );
+                var patron = context.Patrons
+                    .FirstOrDefault(p => p.Name == name && p.CardNum == cardnum);
+
+                if (patron != null)  
+                {
+                    loginSuccessful = true;
+                    user = name;
+                    card = cardnum;
+                }
+            }
+
+            
+            if (!loginSuccessful)
+            {
+                return Json(new { success = false });
             }
             else
             {
-                user = name;
-                card = cardnum;
-                return Json( new { success = true } );
+                return Json(new { success = true });
             }
         }
 
@@ -72,10 +83,27 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public ActionResult AllTitles()
         {
+            using (var context = new Team4LibraryContext())  // Direct instantiation of the context
+            {
+                var books = context.Titles
+                    .Select(t => new
+                    {
+                        isbn = t.Isbn,
+                        title = t.Title,
+                        author = t.Author,
+                        serial = context.Inventory
+                            .Where(i => i.Isbn == t.Isbn)
+                            .Select(i => (uint?)i.Serial).FirstOrDefault(),
+                        name = context.CheckedOut
+                            .Where(c => c.Serial == context.Inventory
+                                .Where(i => i.Isbn == t.Isbn)
+                                .Select(i => i.Serial).FirstOrDefault())
+                            .Select(c => c.CardNumNavigation.Name)
+                            .FirstOrDefault() ?? ""
+                    }).ToList();
 
-            // TODO: Implement
-
-            return Json( null );
+                return Json(books);
+            }
 
         }
 
@@ -90,8 +118,19 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public ActionResult ListMyBooks()
         {
-            // TODO: Implement
-            return Json( null );
+            using (var context = new Team4LibraryContext())  
+            {
+                var books = context.CheckedOut
+                    .Where(c => c.CardNum == card)
+                    .Join(context.Inventory, co => co.Serial, i => i.Serial, (co, i) => new
+                    {
+                        title = i.Title,
+                        author = i.Author,
+                        serial = co.Serial
+                    }).ToList();
+
+                return Json(books);
+            }
         }
 
 
@@ -106,10 +145,25 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public ActionResult CheckOutBook( int serial )
         {
-            // You may have to cast serial to a (uint)
+            using (var context = new Team4LibraryContext())  
+            {
+                var book = context.Inventory.FirstOrDefault(i => i.Serial == serial);
+                if (book == null)
+                {
+                    return Json(new { success = false });
+                }
 
+                var checkedOutBook = new CheckedOut
+                {
+                    Serial = serial,
+                    CardNum = card
+                };
 
-            return Json( new { success = true } );
+                context.CheckedOut.Add(checkedOutBook);
+                context.SaveChanges();
+
+                return Json(new { success = true });
+            }
         }
 
         /// <summary>
@@ -122,9 +176,19 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public ActionResult ReturnBook( int serial )
         {
-            // You may have to cast serial to a (uint)
+            using (var context = new Team4LibraryContext())  
+            {
+                var checkedOutBook = context.CheckedOut.FirstOrDefault(c => c.Serial == serial && c.CardNum == card);
+                if (checkedOutBook == null)
+                {
+                    return Json(new { success = false });
+                }
 
-            return Json( new { success = true } );
+                context.CheckedOut.Remove(checkedOutBook);
+                context.SaveChanges();
+
+                return Json(new { success = true });
+            }
         }
 
 
