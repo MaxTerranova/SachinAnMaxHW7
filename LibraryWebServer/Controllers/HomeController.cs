@@ -118,16 +118,24 @@ namespace LibraryWebServer.Controllers
         [HttpPost]
         public ActionResult ListMyBooks()
         {
-            using (var context = new Team4LibraryContext())  
+            using (var context = new Team4LibraryContext())
             {
                 var books = context.CheckedOut
                     .Where(c => c.CardNum == card)
-                    .Join(context.Inventory, co => co.Serial, i => i.Serial, (co, i) => new
-                    {
-                        title = i.Title,
-                        author = i.Author,
-                        serial = co.Serial
-                    }).ToList();
+                    .Join(context.Inventory,
+                          co => co.Serial,
+                          inv => inv.Serial,
+                          (co, inv) => new { co, inv })
+                    .Join(context.Titles,
+                          both => both.inv.Isbn,
+                          t => t.Isbn,
+                          (both, t) => new
+                          {
+                              title = t.Title,
+                              author = t.Author,
+                              serial = (uint)both.co.Serial
+                          })
+                    .ToList();
 
                 return Json(books);
             }
@@ -155,8 +163,8 @@ namespace LibraryWebServer.Controllers
 
                 var checkedOutBook = new CheckedOut
                 {
-                    Serial = serial,
-                    CardNum = card
+                    Serial = (uint)serial,
+                    CardNum = (uint)card
                 };
 
                 context.CheckedOut.Add(checkedOutBook);
